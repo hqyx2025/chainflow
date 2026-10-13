@@ -9,6 +9,4 @@ COPY ${JAR_FILE} app.jar
 
 ENV JAVA_OPTS=""
 
-EXPOSE 8080 9001 9003 9004 9005 9006
-
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]
