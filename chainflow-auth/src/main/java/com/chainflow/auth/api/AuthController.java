@@ -13,13 +13,16 @@ public class AuthController {
     private final JwtTokenProvider tokenProvider;
     private final String demoUsername;
     private final String demoPassword;
+    private final long expirationSeconds;
 
     public AuthController(JwtTokenProvider tokenProvider,
                           @Value("${chainflow.demo.username:admin}") String demoUsername,
-                          @Value("${chainflow.demo.password:admin123}") String demoPassword) {
+                          @Value("${chainflow.demo.password:admin123}") String demoPassword,
+                          @Value("${chainflow.security.expiration-seconds:7200}") long expirationSeconds) {
         this.tokenProvider = tokenProvider;
         this.demoUsername = demoUsername;
         this.demoPassword = demoPassword;
+        this.expirationSeconds = expirationSeconds;
     }
 
     @PostMapping("/login")
@@ -29,7 +32,7 @@ public class AuthController {
         }
         return ApiResponse.success(new LoginResponse(
                 tokenProvider.createToken(request.username(), "SUPPLY_CHAIN_OPERATOR"),
-                "Bearer", 7200));
+                "Bearer", expirationSeconds));
     }
 
     @GetMapping("/health")

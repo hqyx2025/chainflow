@@ -13,7 +13,7 @@ ChainFlow 是一个面向采购、库存、订单与履约的 Java 微服务项�
 
 ## 模块
 
-| 模块 | 默认端口 | 作用 |
+| 模块 | 容器端口 | 作用 |
 | --- | ---: | --- |
 | `chainflow-gateway` | 8080 | 统一入口、路由、JWT 校验 |
 | `chainflow-auth` | 9001 | 演示登录和 JWT 签发 |
@@ -22,6 +22,8 @@ ChainFlow 是一个面向采购、库存、订单与履约的 Java 微服务项�
 | `chainflow-order` | 9005 | 创建订单、支付、调用库存预占 |
 | `chainflow-fulfillment` | 9006 | 创建履约单、推进履约状态 |
 | `chainflow-common` | - | 统一响应、异常、JWT、Trace ID |
+
+通过 `docker-compose.services.yml` 启动时，只有网关的 `8080` 映射到宿主机；认证、采购、库存、订单和履约服务仅在 `chainflow` Docker 网络中通过各自容器端口访问（例如 `http://auth:9001`），不会直接暴露宿主机端口。
 
 ## 快速启动
 
@@ -66,7 +68,7 @@ ChainFlow 是一个面向采购、库存、订单与履约的 Java 微服务项�
    docker compose -f docker-compose.yml -f docker-compose.services.yml ps
    ```
 
-   业务容器通过 `chainflow` 网络使用 `mysql:3306`、`redis:6379` 和服务名互相访问，默认关闭 Nacos、Seata、RocketMQ 开关。合并配置可用以下命令校验：
+   业务容器通过 `chainflow` 网络使用 `mysql:3306`、`redis:6379` 和服务名互相访问。只有 `http://localhost:8080` 是宿主机入口，其他业务服务端口仅对 Docker 网络内可见；默认关闭 Nacos、Seata、RocketMQ 开关。合并配置可用以下命令校验：
 
    ```bash
    docker compose -f docker-compose.yml -f docker-compose.services.yml config --quiet

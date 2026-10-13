@@ -44,8 +44,8 @@ services:
         JAR_FILE: chainflow-auth/target/*.jar
     image: chainflow-auth:local
     restart: unless-stopped
-    ports:
-      - "9001:9001"
+    expose:
+      - "9001"
     environment:
       TZ: Asia/Shanghai
       REDIS_HOST: redis
@@ -71,8 +71,8 @@ services:
         JAR_FILE: chainflow-purchase/target/*.jar
     image: chainflow-purchase:local
     restart: unless-stopped
-    ports:
-      - "9003:9003"
+    expose:
+      - "9003"
     environment:
       TZ: Asia/Shanghai
       MYSQL_HOST: mysql
@@ -97,8 +97,8 @@ services:
         JAR_FILE: chainflow-inventory/target/*.jar
     image: chainflow-inventory:local
     restart: unless-stopped
-    ports:
-      - "9004:9004"
+    expose:
+      - "9004"
     environment:
       TZ: Asia/Shanghai
       MYSQL_HOST: mysql
@@ -122,8 +122,8 @@ services:
         JAR_FILE: chainflow-order/target/*.jar
     image: chainflow-order:local
     restart: unless-stopped
-    ports:
-      - "9005:9005"
+    expose:
+      - "9005"
     environment:
       TZ: Asia/Shanghai
       MYSQL_HOST: mysql
@@ -153,8 +153,8 @@ services:
         JAR_FILE: chainflow-fulfillment/target/*.jar
     image: chainflow-fulfillment:local
     restart: unless-stopped
-    ports:
-      - "9006:9006"
+    expose:
+      - "9006"
     environment:
       TZ: Asia/Shanghai
       MYSQL_HOST: mysql
