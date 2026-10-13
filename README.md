@@ -62,7 +62,7 @@ ChainFlow 是一个面向采购、库存、订单与履约的 Java 微服务项�
    ```bash
    # JAR 必须先由 Maven 生成
    mvn -DskipTests package
-   docker compose -f docker-compose.yml -f docker-compose.services.yml up -d --build
+   docker compose -f docker-compose.yml -f docker-compose.services.yml up -d --build mysql redis gateway auth purchase inventory order fulfillment
    docker compose -f docker-compose.yml -f docker-compose.services.yml ps
    ```
 

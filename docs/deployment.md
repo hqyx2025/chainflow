@@ -23,8 +23,9 @@ Compose 文件位于仓库根目录，RocketMQ Broker 配置位于 `infra/rocket
 # 编译并生成六个可执行 JAR（跳过测试可缩短本地构建时间）
 mvn -DskipTests package
 
-# 启动 MySQL、Redis 等基础设施，并构建/启动 gateway、auth、purchase、inventory、order、fulfillment
-docker compose -f docker-compose.yml -f docker-compose.services.yml up -d --build
+# 启动 MySQL、Redis，并构建/启动 gateway、auth、purchase、inventory、order、fulfillment
+# 仅列出这些服务可保持 Nacos、RocketMQ、Elasticsearch 等组件不启动
+docker compose -f docker-compose.yml -f docker-compose.services.yml up -d --build mysql redis gateway auth purchase inventory order fulfillment
 
 # 查看业务容器状态和日志
 docker compose -f docker-compose.yml -f docker-compose.services.yml ps
