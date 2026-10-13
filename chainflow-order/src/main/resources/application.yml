@@ -1,0 +1,45 @@
+spring:
+  jackson:
+    default-property-inclusion: non_null
+  application:
+    name: order-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:18848}
+        enabled: ${NACOS_ENABLED:false}
+        register-enabled: ${NACOS_ENABLED:false}
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:13306}/${MYSQL_DATABASE:chainflow}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USERNAME:chainflow}
+    password: ${MYSQL_PASSWORD:chainflow_dev}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+mybatis:
+  configuration:
+    map-underscore-to-camel-case: true
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+server:
+  port: 9005
+chainflow:
+  services:
+    inventory-url: ${INVENTORY_SERVICE_URL:http://localhost:9004}
+  messaging:
+    rocketmq-enabled: ${ROCKETMQ_ENABLED:false}
+rocketmq:
+  name-server: ${ROCKETMQ_NAME_SERVER:localhost:19876}
+seata:
+  enabled: ${SEATA_ENABLED:false}
+  tx-service-group: chainflow_tx_group
+

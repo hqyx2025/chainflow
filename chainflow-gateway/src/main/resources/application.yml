@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: chainflow-gateway
+  main:
+    web-application-type: reactive
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:18848}
+        enabled: ${NACOS_ENABLED:false}
+        register-enabled: ${NACOS_ENABLED:false}
+    gateway:
+      default-filters:
+        - AddResponseHeader=X-ChainFlow-Version, 0.1.0
+      routes:
+        - id: auth-service
+          uri: ${AUTH_SERVICE_URL:http://localhost:9001}
+          predicates: [Path=/api/v1/auth/**]
+        - id: purchase-service
+          uri: ${PURCHASE_SERVICE_URL:http://localhost:9003}
+          predicates: [Path=/api/v1/purchases/**]
+        - id: inventory-service
+          uri: ${INVENTORY_SERVICE_URL:http://localhost:9004}
+          predicates: [Path=/api/v1/inventory/**]
+        - id: order-service
+          uri: ${ORDER_SERVICE_URL:http://localhost:9005}
+          predicates: [Path=/api/v1/orders/**]
+        - id: fulfillment-service
+          uri: ${FULFILLMENT_SERVICE_URL:http://localhost:9006}
+          predicates: [Path=/api/v1/fulfillments/**]
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,gateway
+server:
+  port: 8080
+chainflow:
+  security:
+    jwt-secret: ${JWT_SECRET:change-this-chainflow-secret-key-please-32chars}
+    expiration-seconds: ${JWT_EXPIRATION_SECONDS:7200}
+

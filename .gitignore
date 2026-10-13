@@ -1,0 +1,15 @@
+# Maven
+**/target/
+.mvn/timing.properties
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Runtime and local secrets
+*.log
+*.err
+.env
+
+# Docker data (named volumes live outside the repository)

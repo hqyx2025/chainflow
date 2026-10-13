@@ -1,0 +1,173 @@
+name: chainflow
+
+services:
+  mysql:
+    image: mysql:8.0.36
+    container_name: chainflow-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-chainflow_root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-chainflow}
+      MYSQL_USER: ${MYSQL_USER:-chainflow}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-chainflow_dev}
+      TZ: Asia/Shanghai
+    ports:
+      - "13306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./infra/mysql/init:/docker-entrypoint-initdb.d:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - chainflow
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: chainflow-redis
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-chainflow_redis}
+      TZ: Asia/Shanghai
+    ports:
+      - "16379:6379"
+    volumes:
+      - redis_data:/data
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${REDIS_PASSWORD:-chainflow_redis}
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks:
+      - chainflow
+
+  nacos:
+    image: nacos/nacos-server:v2.4.3
+    container_name: chainflow-nacos
+    restart: unless-stopped
+    environment:
+      MODE: standalone
+      NACOS_AUTH_ENABLE: "false"
+      PREFER_HOST_MODE: hostname
+      TZ: Asia/Shanghai
+      JVM_XMS: 256m
+      JVM_XMX: 512m
+      JVM_XMN: 256m
+    ports:
+      - "18848:8848"
+      - "19848:9848"
+      - "19849:9849"
+    volumes:
+      - nacos_logs:/home/nacos/logs
+      - nacos_data:/home/nacos/data
+    networks:
+      - chainflow
+
+  rocketmq-namesrv:
+    image: apache/rocketmq:5.3.1
+    container_name: chainflow-rocketmq-namesrv
+    restart: unless-stopped
+    command: sh mqnamesrv
+    ports:
+      - "19876:9876"
+    volumes:
+      - rocketmq_namesrv_logs:/home/rocketmq/logs
+    networks:
+      - chainflow
+
+  rocketmq-broker:
+    image: apache/rocketmq:5.3.1
+    container_name: chainflow-rocketmq-broker
+    restart: unless-stopped
+    depends_on:
+      rocketmq-namesrv:
+        condition: service_started
+    command: sh mqbroker -c /home/rocketmq/rocketmq-5.3.1/conf/broker.conf
+    ports:
+      - "20911:20911"
+      - "20909:20909"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./infra/rocketmq/broker.conf:/home/rocketmq/rocketmq-5.3.1/conf/broker.conf:ro
+      - rocketmq_broker_store:/home/rocketmq/store
+      - rocketmq_broker_logs:/home/rocketmq/logs
+    networks:
+      - chainflow
+
+  rocketmq-console:
+    image: apacherocketmq/rocketmq-dashboard:latest
+    container_name: chainflow-rocketmq-console
+    restart: unless-stopped
+    profiles:
+      - console
+    depends_on:
+      rocketmq-namesrv:
+        condition: service_started
+      rocketmq-broker:
+        condition: service_started
+    environment:
+      JAVA_OPTS: -Drocketmq.namesrvAddr=rocketmq-namesrv:9876
+      TZ: Asia/Shanghai
+    ports:
+      - "18080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - chainflow
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    container_name: chainflow-elasticsearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      xpack.security.enrollment.enabled: "false"
+      bootstrap.memory_lock: "true"
+      ES_JAVA_OPTS: -Xms512m -Xmx512m
+      TZ: Asia/Shanghai
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "19200:9200"
+      - "19300:9300"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9200/_cluster/health >/dev/null"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+    networks:
+      - chainflow
+
+volumes:
+  mysql_data:
+  redis_data:
+  nacos_logs:
+  nacos_data:
+  rocketmq_namesrv_logs:
+  rocketmq_broker_store:
+  rocketmq_broker_logs:
+  elasticsearch_data:
+
+networks:
+  chainflow:
+    name: chainflow

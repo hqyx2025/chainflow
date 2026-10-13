@@ -1,0 +1,29 @@
+spring:
+  application:
+    name: auth-service
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:16379}
+      password: ${REDIS_PASSWORD:chainflow_redis}
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:localhost:18848}
+        enabled: ${NACOS_ENABLED:false}
+        register-enabled: ${NACOS_ENABLED:false}
+chainflow:
+  security:
+    jwt-secret: ${JWT_SECRET:change-this-chainflow-secret-key-please-32chars}
+    expiration-seconds: ${JWT_EXPIRATION_SECONDS:7200}
+  demo:
+    username: ${CHAINFLOW_DEMO_USERNAME:admin}
+    password: ${CHAINFLOW_DEMO_PASSWORD:admin123}
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+server:
+  port: 9001
+
