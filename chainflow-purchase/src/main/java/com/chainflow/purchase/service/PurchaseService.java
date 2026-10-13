@@ -4,6 +4,7 @@ import com.chainflow.common.api.ApiResponse;
 import com.chainflow.purchase.api.PurchaseController.CreatePurchaseRequest;
 import com.chainflow.purchase.mapper.PurchaseMapper;
 import com.chainflow.purchase.model.PurchaseOrder;
+import com.chainflow.purchase.model.PurchaseOrderInsert;
 import com.chainflow.common.exception.BusinessException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -37,9 +38,18 @@ public class PurchaseService {
     }
     @Transactional
     public PurchaseOrder create(CreatePurchaseRequest request) {
-        PurchaseOrder order = new PurchaseOrder(null, request.supplierCode(), request.sku(), request.quantity(), "CREATED", null);
-        mapper.insert(order);
-        return order;
+        PurchaseOrderInsert insert = new PurchaseOrderInsert(request.supplierCode(), request.sku(), request.quantity());
+        int affectedRows = mapper.insert(insert);
+        if (affectedRows != 1 || insert.getId() == null) {
+            throw new BusinessException("PUR-001", "创建采购单失败");
+        }
+        // Read the persisted row so the response includes the generated id and
+        // database timestamp, while keeping the public model immutable.
+        PurchaseOrder persisted = mapper.findByIdForUpdate(insert.getId());
+        if (persisted == null) {
+            throw new BusinessException("PUR-001", "创建采购单失败");
+        }
+        return persisted;
     }
 
     @Transactional
