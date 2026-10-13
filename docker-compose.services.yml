@@ -1,0 +1,175 @@
+name: chainflow
+
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        JAR_FILE: chainflow-gateway/target/*.jar
+    image: chainflow-gateway:local
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: Asia/Shanghai
+      NACOS_ADDR: ${NACOS_ADDR:-nacos:8848}
+      NACOS_ENABLED: ${NACOS_ENABLED:-false}
+      AUTH_SERVICE_URL: http://auth:9001
+      PURCHASE_SERVICE_URL: http://purchase:9003
+      INVENTORY_SERVICE_URL: http://inventory:9004
+      ORDER_SERVICE_URL: http://order:9005
+      FULFILLMENT_SERVICE_URL: http://fulfillment:9006
+      JWT_SECRET: ${JWT_SECRET:-change-this-chainflow-secret-key-please-32chars}
+      JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-7200}
+    depends_on:
+      auth:
+        condition: service_started
+      purchase:
+        condition: service_started
+      inventory:
+        condition: service_started
+      order:
+        condition: service_started
+      fulfillment:
+        condition: service_started
+    networks:
+      - chainflow
+
+  auth:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        JAR_FILE: chainflow-auth/target/*.jar
+    image: chainflow-auth:local
+    restart: unless-stopped
+    ports:
+      - "9001:9001"
+    environment:
+      TZ: Asia/Shanghai
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-chainflow_redis}
+      NACOS_ADDR: ${NACOS_ADDR:-nacos:8848}
+      NACOS_ENABLED: ${NACOS_ENABLED:-false}
+      JWT_SECRET: ${JWT_SECRET:-change-this-chainflow-secret-key-please-32chars}
+      JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-7200}
+      CHAINFLOW_DEMO_USERNAME: ${CHAINFLOW_DEMO_USERNAME:-admin}
+      CHAINFLOW_DEMO_PASSWORD: ${CHAINFLOW_DEMO_PASSWORD:-admin123}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - chainflow
+
+  purchase:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        JAR_FILE: chainflow-purchase/target/*.jar
+    image: chainflow-purchase:local
+    restart: unless-stopped
+    ports:
+      - "9003:9003"
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-chainflow}
+      MYSQL_USERNAME: ${MYSQL_USER:-chainflow}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-chainflow_dev}
+      NACOS_ADDR: ${NACOS_ADDR:-nacos:8848}
+      NACOS_ENABLED: ${NACOS_ENABLED:-false}
+      INVENTORY_SERVICE_URL: http://inventory:9004
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - chainflow
+
+  inventory:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        JAR_FILE: chainflow-inventory/target/*.jar
+    image: chainflow-inventory:local
+    restart: unless-stopped
+    ports:
+      - "9004:9004"
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-chainflow}
+      MYSQL_USERNAME: ${MYSQL_USER:-chainflow}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-chainflow_dev}
+      NACOS_ADDR: ${NACOS_ADDR:-nacos:8848}
+      NACOS_ENABLED: ${NACOS_ENABLED:-false}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - chainflow
+
+  order:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        JAR_FILE: chainflow-order/target/*.jar
+    image: chainflow-order:local
+    restart: unless-stopped
+    ports:
+      - "9005:9005"
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-chainflow}
+      MYSQL_USERNAME: ${MYSQL_USER:-chainflow}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-chainflow_dev}
+      NACOS_ADDR: ${NACOS_ADDR:-nacos:8848}
+      NACOS_ENABLED: ${NACOS_ENABLED:-false}
+      INVENTORY_SERVICE_URL: http://inventory:9004
+      FULFILLMENT_SERVICE_URL: http://fulfillment:9006
+      ROCKETMQ_ENABLED: ${ROCKETMQ_ENABLED:-false}
+      ROCKETMQ_NAME_SERVER: ${ROCKETMQ_NAME_SERVER:-rocketmq-namesrv:9876}
+      SEATA_ENABLED: ${SEATA_ENABLED:-false}
+      SEATA_SERVER: ${SEATA_SERVER:-seata-server:8091}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - chainflow
+
+  fulfillment:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.service
+      args:
+        JAR_FILE: chainflow-fulfillment/target/*.jar
+    image: chainflow-fulfillment:local
+    restart: unless-stopped
+    ports:
+      - "9006:9006"
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-chainflow}
+      MYSQL_USERNAME: ${MYSQL_USER:-chainflow}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-chainflow_dev}
+      NACOS_ADDR: ${NACOS_ADDR:-nacos:8848}
+      NACOS_ENABLED: ${NACOS_ENABLED:-false}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - chainflow
+
+networks:
+  chainflow:
+    name: chainflow

@@ -1,6 +1,6 @@
 # ChainFlow 本地基础设施部署
 
-本文档说明如何使用 Docker Compose 启动 ChainFlow 开发环境所需的中间件：MySQL 8、Redis、Nacos、RocketMQ 和 Elasticsearch。RocketMQ Dashboard 与 Seata Server 默认不启动，需要时分别启用 `console` 和 `seata` profile。
+本文档说明如何使用 Docker Compose 启动 ChainFlow 开发环境所需的中间件：MySQL 8、Redis、Nacos、RocketMQ 和 Elasticsearch，并将六个 Spring Boot 应用作为容器运行。RocketMQ Dashboard 与 Seata Server 默认不启动，需要时分别启用 `console` 和 `seata` profile。
 
 ## 环境要求
 
@@ -14,6 +14,36 @@
   ```
 
 Compose 文件位于仓库根目录，RocketMQ Broker 配置位于 `infra/rocketmq/broker.conf`。首次启动时会创建持久化卷，删除容器不会删除数据。
+
+## 构建并启动业务服务容器
+
+业务服务使用 `docker/Dockerfile.service`，镜像内只包含已经由 Maven 打包的 Spring Boot JAR。先完成打包，再用基础设施 Compose 文件和业务服务覆盖文件一起启动：
+
+```bash
+# 编译并生成六个可执行 JAR（跳过测试可缩短本地构建时间）
+mvn -DskipTests package
+
+# 启动 MySQL、Redis 等基础设施，并构建/启动 gateway、auth、purchase、inventory、order、fulfillment
+docker compose -f docker-compose.yml -f docker-compose.services.yml up -d --build
+
+# 查看业务容器状态和日志
+docker compose -f docker-compose.yml -f docker-compose.services.yml ps
+docker compose -f docker-compose.yml -f docker-compose.services.yml logs -f gateway
+```
+
+覆盖文件把服务加入现有 `chainflow` 网络：容器内使用 `mysql:3306`、`redis:6379` 和各服务名（例如 `http://inventory:9004`）互相访问。业务服务等待 MySQL/Redis 健康检查通过后启动；网关等待各业务容器启动。容器模式默认将 `NACOS_ENABLED`、`SEATA_ENABLED`、`ROCKETMQ_ENABLED` 设为 `false`，无需启动这些可选组件即可运行基础链路。需要启用时，可在 `.env` 或当前 shell 中覆盖对应变量，并启动相应基础设施 profile。
+
+停止业务和基础设施容器（保留数据卷）：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.services.yml down
+```
+
+修改 Compose 配置或环境变量后，可先验证合并结果：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.services.yml config --quiet
+```
 
 ## 启动与停止
 
@@ -43,7 +73,7 @@ docker compose down
 docker compose down -v
 ```
 
-首次启动镜像下载和 Elasticsearch 初始化可能需要几分钟。使用 `docker compose ps` 确认容器进入 `running`，再启动 ChainFlow Java 服务。
+首次启动镜像下载和 Elasticsearch 初始化可能需要几分钟。使用 `docker compose ps` 确认基础设施进入 `running`，使用合并 Compose 文件的 `ps` 确认业务容器已启动。
 
 ## 服务地址与连接参数
 

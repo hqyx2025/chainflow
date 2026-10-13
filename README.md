@@ -37,12 +37,14 @@ ChainFlow 是一个面向采购、库存、订单与履约的 Java 微服务项�
    docker compose up -d
    ```
 
-2. 编译全部模块：
+2. 编译全部模块并生成可执行 JAR：
 
    ```bash
    mvn clean verify
    mvn -DskipTests install
    ```
+
+   也可以只执行 `mvn -DskipTests package`，供 Docker 镜像构建使用。
 
 3. 分别启动服务（也可以在 IDE 中运行各模块的 `*Application`）：
 
@@ -54,6 +56,21 @@ ChainFlow 是一个面向采购、库存、订单与履约的 Java 微服务项�
    ```
 
    采购和履约服务分别使用 `chainflow-purchase`、`chainflow-fulfillment` 启动。应用默认连接 Compose 映射端口：MySQL `13306`、Redis `16379`、Nacos `18848`。
+
+4. 使用 Docker 运行全部六个业务服务：
+
+   ```bash
+   # JAR 必须先由 Maven 生成
+   mvn -DskipTests package
+   docker compose -f docker-compose.yml -f docker-compose.services.yml up -d --build
+   docker compose -f docker-compose.yml -f docker-compose.services.yml ps
+   ```
+
+   业务容器通过 `chainflow` 网络使用 `mysql:3306`、`redis:6379` 和服务名互相访问，默认关闭 Nacos、Seata、RocketMQ 开关。合并配置可用以下命令校验：
+
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.services.yml config --quiet
+   ```
 
 ## 接口演示
 
