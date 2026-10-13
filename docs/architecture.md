@@ -133,6 +133,27 @@ CREATED ──reserve──> ALLOCATED ──startPick──> PICKING ──ship
 
 分页请求使用 `page`（从 1 开始）和 `pageSize`（默认 20，最大 100）。写操作支持 `Idempotency-Key` 请求头；同一操作键和请求体不变时返回第一次结果。
 
+### 6.0 第一阶段已实现接口
+
+下面的接口与仓库当前代码一致，均可通过网关访问。除登录和健康检查外，网关要求 `Authorization: Bearer <JWT>`。
+
+| 方法 | 路径 | 服务 | 说明 |
+| --- | --- | --- | --- |
+| POST | `/api/v1/auth/login` | auth | 使用演示账号签发 JWT |
+| POST | `/api/v1/purchases` | purchase | 创建 `CREATED` 采购单 |
+| GET | `/api/v1/purchases` | purchase | 查询采购单列表 |
+| POST | `/api/v1/purchases/{id}/receive` | purchase | 调库存入库，采购单变为 `RECEIVED`，重复调用幂等 |
+| GET | `/api/v1/inventory/{sku}` | inventory | 查询可用/预占库存 |
+| POST | `/api/v1/inventory/receipts` | inventory | 按采购单入库，采购单号唯一幂等 |
+| POST | `/api/v1/inventory/reservations` | inventory | 按订单号预占，库存不足返回 `INV-001` |
+| POST | `/api/v1/orders` | order | 创建 `PENDING_PAYMENT` 订单 |
+| POST | `/api/v1/orders/{id}/pay` | order | 预占库存、标记 `PAID`，幂等创建履约单并进入 `FULFILLING` |
+| GET | `/api/v1/orders/{id}` | order | 查询订单状态 |
+| POST | `/api/v1/fulfillments` | fulfillment | 按订单号幂等创建履约单 |
+| PATCH | `/api/v1/fulfillments/{id}/status?status=...` | fulfillment | 推进履约状态 |
+
+当前实现用单 SKU/单仓库模型演示闭环；下方各节描述的多 SKU、角色权限、分页和拆单能力属于后续迭代设计。
+
 ### 6.1 认证
 
 | 方法 | 路径 | 权限 | 说明 |
@@ -194,11 +215,11 @@ CREATED ──reserve──> ALLOCATED ──startPick──> PICKING ──ship
 
 ## 7. 事务、并发与可靠性
 
-1. **数据库事务**：采购收货在一个事务内完成状态更新、明细累计、库存更新、库存流水和 `outbox_event` 写入；订单预占同理。禁止先改库存再提交订单。
-2. **库存并发**：`inventory_stock` 使用 `version` 乐观锁；更新条件同时包含 `id`、`version` 和 `available_qty >= ?`。更新影响行数为 0 时重试 2 次，仍失败返回库存不足或并发冲突。高并发后再评估 Redis Lua/分布式锁。
-3. **幂等**：创建订单、提交/审批、收货、发货均要求 `Idempotency-Key`。先插入 `idempotency_record` 占位，唯一键冲突时返回已保存响应；请求体哈希变化返回 `CF_IDEMPOTENCY_REUSED`。
+1. **数据库事务**：当前采购收货、库存入库/预占、订单支付和履约创建分别在各自服务事务内完成；订单支付保留 `@GlobalTransactional` 边界，启用 Seata 后再扩展为跨服务事务。生产版本仍需补充 outbox 与补偿任务。
+2. **库存并发**：当前库存更新使用 `available_quantity >= quantity` 条件原子 SQL；库存入库和预占都在事务内执行。高并发版本再评估版本号、Redis Lua 或分布式锁。
+3. **幂等**：采购入库以 `purchase_id` 唯一键、库存预占以 `order_id` 唯一键、履约创建以 `order_id` 唯一键实现重复请求安全；通用 `Idempotency-Key` 表属于后续迭代。
 4. **缓存**：SKU 和仓库启停信息可缓存 5 分钟；库存查询可短缓存 2 秒但写入后主动删除。任何库存决策必须读取事务内 MySQL 数据。
-5. **Outbox**：当前只在同一事务落库，不启动消息中间件；预留定时发布器按 `status=PENDING` 重试并记录 `retry_count`，为后续接 RocketMQ 提供稳定事件契约。
+5. **消息**：订单服务可选发布 `chainflow-order-paid` RocketMQ 事件，默认关闭；后续用 outbox 保证数据库状态与消息发送的一致性。
 6. **审计与追踪**：每个请求生成 `traceId`；状态变更记录操作人、旧状态、新状态、原因。日志不得打印密码、JWT、完整收货地址等敏感字段。
 
 ## 8. 错误码与鉴权

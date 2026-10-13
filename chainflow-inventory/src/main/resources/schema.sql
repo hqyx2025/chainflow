@@ -15,6 +15,14 @@ CREATE TABLE IF NOT EXISTS inventory_reservation (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY idx_reservation_sku (sku)
 );
+CREATE TABLE IF NOT EXISTS inventory_receipt (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    purchase_id BIGINT NOT NULL UNIQUE,
+    sku VARCHAR(128) NOT NULL,
+    quantity INT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_receipt_sku (sku)
+);
 INSERT INTO inventory_item (sku, available_quantity, reserved_quantity)
 VALUES ('SKU-DEMO-001', 100, 0)
 ON DUPLICATE KEY UPDATE sku = VALUES(sku);

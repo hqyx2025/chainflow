@@ -4,6 +4,19 @@ import org.apache.ibatis.annotations.*;
 
 @Mapper
 public interface InventoryMapper {
+    /**
+     * Atomically records a purchase receipt. The unique purchase id makes the
+     * receive operation idempotent when the caller retries the request.
+     */
+    @Insert("INSERT IGNORE INTO inventory_receipt (purchase_id, sku, quantity, created_at) VALUES (#{purchaseId}, #{sku}, #{quantity}, NOW())")
+    int insertReceiptIfAbsent(Long purchaseId, String sku, int quantity);
+
+    @Update("UPDATE inventory_item SET available_quantity = available_quantity + #{quantity} WHERE sku = #{sku}")
+    int receive(String sku, int quantity);
+
+    @Select("SELECT purchase_id FROM inventory_receipt WHERE purchase_id = #{purchaseId}")
+    Long findReceipt(Long purchaseId);
+
     @Update("UPDATE inventory_item SET available_quantity = available_quantity - #{quantity}, reserved_quantity = reserved_quantity + #{quantity} WHERE sku = #{sku} AND available_quantity >= #{quantity}")
     int reserve(String sku, int quantity);
     @Insert("INSERT INTO inventory_reservation (reservation_id, order_id, sku, quantity, status, created_at) VALUES (#{reservationId}, #{orderId}, #{sku}, #{quantity}, 'RESERVED', NOW())")

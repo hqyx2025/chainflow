@@ -73,6 +73,10 @@ curl -X POST http://localhost:8080/api/v1/orders \
 # 3. 对返回的 orderId 发起演示支付；订单服务会调用库存服务预占库存
 curl -X POST http://localhost:8080/api/v1/orders/{orderId}/pay \
   -H "Authorization: Bearer $TOKEN"
+
+# 4. 采购入库（采购单创建后调用，库存会增加且重复调用幂等）
+curl -X POST http://localhost:8080/api/v1/purchases/{purchaseId}/receive \
+  -H "Authorization: Bearer $TOKEN"
 ```
 
 完整模块边界、状态机、数据约束见 [`docs/architecture.md`](docs/architecture.md)；基础设施、端口、环境变量和故障排查见 [`docs/deployment.md`](docs/deployment.md)。

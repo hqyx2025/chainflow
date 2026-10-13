@@ -11,4 +11,10 @@ public interface PurchaseMapper {
     int insert(PurchaseOrder order);
     @Select("SELECT id, supplier_code AS supplierCode, sku, quantity, status, DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s') AS createdAt FROM purchase_order ORDER BY id DESC")
     List<PurchaseOrder> findAll();
+
+    @Select("SELECT id, supplier_code AS supplierCode, sku, quantity, status, DATE_FORMAT(created_at, '%Y-%m-%dT%H:%i:%s') AS createdAt FROM purchase_order WHERE id = #{id} FOR UPDATE")
+    PurchaseOrder findByIdForUpdate(Long id);
+
+    @Update("UPDATE purchase_order SET status = 'RECEIVED' WHERE id = #{id} AND status = 'CREATED'")
+    int markReceived(Long id);
 }

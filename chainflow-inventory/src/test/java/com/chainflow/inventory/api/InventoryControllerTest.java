@@ -27,4 +27,39 @@ class InventoryControllerTest {
                 () -> controller.reserve(new InventoryController.ReserveRequest("CF-2", "SKU-DEMO-001", 200)));
         verify(mapper, never()).insertReservation(anyString(), anyString(), anyString(), anyInt());
     }
+
+    @Test
+    void receivingPurchaseAtomicallyIncreasesAvailableStock() {
+        when(mapper.insertReceiptIfAbsent(7L, "SKU-DEMO-001", 5)).thenReturn(1);
+        when(mapper.receive("SKU-DEMO-001", 5)).thenReturn(1);
+        when(mapper.findBySku("SKU-DEMO-001"))
+                .thenReturn(new InventoryMapper.InventoryView(1L, "SKU-DEMO-001", 105, 0));
+
+        var result = controller.receive(new InventoryController.ReceiveRequest(7L, "SKU-DEMO-001", 5));
+
+        assertEquals("RECEIVED", result.data().status());
+        assertEquals(105, result.data().availableQuantity());
+        verify(mapper).receive("SKU-DEMO-001", 5);
+    }
+
+    @Test
+    void duplicatePurchaseReceiptDoesNotIncreaseStockAgain() {
+        when(mapper.insertReceiptIfAbsent(7L, "SKU-DEMO-001", 5)).thenReturn(0);
+        when(mapper.findBySku("SKU-DEMO-001"))
+                .thenReturn(new InventoryMapper.InventoryView(1L, "SKU-DEMO-001", 105, 0));
+
+        var result = controller.receive(new InventoryController.ReceiveRequest(7L, "SKU-DEMO-001", 5));
+
+        assertEquals("RECEIVED", result.data().status());
+        verify(mapper, never()).receive(anyString(), anyInt());
+    }
+
+    @Test
+    void receivingUnknownSkuFailsAndDoesNotReturnSuccess() {
+        when(mapper.insertReceiptIfAbsent(8L, "UNKNOWN", 1)).thenReturn(1);
+        when(mapper.receive("UNKNOWN", 1)).thenReturn(0);
+
+        assertThrows(BusinessException.class,
+                () -> controller.receive(new InventoryController.ReceiveRequest(8L, "UNKNOWN", 1)));
+    }
 }

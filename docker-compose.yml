@@ -76,6 +76,25 @@ services:
     networks:
       - chainflow
 
+  seata-server:
+    image: seataio/seata-server:2.0.0
+    container_name: chainflow-seata
+    restart: unless-stopped
+    profiles:
+      - seata
+    environment:
+      SEATA_IP: 127.0.0.1
+      SEATA_PORT: 8091
+      STORE_MODE: file
+      TZ: Asia/Shanghai
+    ports:
+      - "8091:8091"
+      - "17091:7091"
+    volumes:
+      - seata_logs:/seata-server/logs
+    networks:
+      - chainflow
+
   rocketmq-namesrv:
     image: apache/rocketmq:5.3.1
     container_name: chainflow-rocketmq-namesrv
@@ -167,6 +186,7 @@ volumes:
   rocketmq_broker_store:
   rocketmq_broker_logs:
   elasticsearch_data:
+  seata_logs:
 
 networks:
   chainflow:

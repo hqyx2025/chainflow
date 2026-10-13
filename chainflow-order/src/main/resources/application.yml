@@ -35,6 +35,8 @@ server:
 chainflow:
   services:
     inventory-url: ${INVENTORY_SERVICE_URL:http://localhost:9004}
+    fulfillment-url: ${FULFILLMENT_SERVICE_URL:http://localhost:9006}
+    fulfillment-carrier-code: ${FULFILLMENT_CARRIER_CODE:STANDARD}
   messaging:
     rocketmq-enabled: ${ROCKETMQ_ENABLED:false}
 rocketmq:
@@ -42,4 +44,7 @@ rocketmq:
 seata:
   enabled: ${SEATA_ENABLED:false}
   tx-service-group: chainflow_tx_group
+  service:
+    grouplist:
+      default: ${SEATA_SERVER:127.0.0.1:8091}
 

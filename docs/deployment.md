@@ -1,6 +1,6 @@
 # ChainFlow 本地基础设施部署
 
-本文档说明如何使用 Docker Compose 启动 ChainFlow 开发环境所需的中间件：MySQL 8、Redis、Nacos、RocketMQ 和 Elasticsearch。RocketMQ Dashboard 默认不启动，需要查看消息时再启用 `console` profile。
+本文档说明如何使用 Docker Compose 启动 ChainFlow 开发环境所需的中间件：MySQL 8、Redis、Nacos、RocketMQ 和 Elasticsearch。RocketMQ Dashboard 与 Seata Server 默认不启动，需要时分别启用 `console` 和 `seata` profile。
 
 ## 环境要求
 
@@ -25,6 +25,12 @@ docker compose up -d
 
 # 同时启动 RocketMQ Dashboard
 docker compose --profile console up -d
+
+# 启动可选 Seata Server（文件存储模式）
+docker compose --profile seata up -d seata-server
+
+# 同时启动 Dashboard 和 Seata
+docker compose --profile console --profile seata up -d
 
 # 查看容器状态和日志
 docker compose ps
@@ -51,6 +57,7 @@ docker compose down -v
 | RocketMQ NameServer | `127.0.0.1:19876` | NameServer 地址 `127.0.0.1:19876` |
 | RocketMQ Broker | `127.0.0.1:20911` | 客户端通过 NameServer 发现 Broker |
 | RocketMQ Dashboard | [http://127.0.0.1:18080](http://127.0.0.1:18080) | 仅使用 `--profile console` 时可用 |
+| Seata Server | `127.0.0.1:8091`（事务服务）；[http://127.0.0.1:17091](http://127.0.0.1:17091)（HTTP 管理端口） | 仅使用 `--profile seata` 时启动，文件存储模式 |
 | Elasticsearch | [http://127.0.0.1:19200](http://127.0.0.1:19200) | 开发环境关闭安全认证 |
 
 常用 Spring Boot 配置示例：
@@ -74,7 +81,26 @@ spring:
         server-addr: 127.0.0.1:18848
 rocketmq:
   name-server: 127.0.0.1:19876
+seata:
+  enabled: ${SEATA_ENABLED:false}
+  tx-service-group: chainflow_tx_group
 ```
+
+订单服务当前通过 `SEATA_ENABLED` 控制 Seata 客户端，默认值为 `false`。启用本地 Seata 时，先启动 profile，再在启动订单服务的同一 shell 中设置环境变量：
+
+```bash
+docker compose --profile seata up -d seata-server
+
+# Linux/macOS
+export SEATA_ENABLED=true
+mvn -f chainflow-order/pom.xml spring-boot:run
+
+# Windows PowerShell
+$env:SEATA_ENABLED = "true"
+mvn -f chainflow-order/pom.xml spring-boot:run
+```
+
+关闭 Seata 或恢复默认轻量开发模式时，将 `SEATA_ENABLED` 设为 `false`（或取消该环境变量），并执行 `docker compose --profile seata stop seata-server`。当前客户端使用 `chainflow_tx_group`，默认连接本机 `8091`；Compose 已将 Seata 事务端口保持为 `8091:8091`，因此无需额外覆盖客户端地址。Seata 使用 AT 模式时，各业务库还需要对应的 `undo_log` 表，正式环境应改用数据库存储、认证和独立凭据。
 
 ## 修改默认密码和端口
 
@@ -102,6 +128,9 @@ curl http://127.0.0.1:18848/nacos/v1/console/health/readiness
 
 # RocketMQ（查看 NameServer/Broker 日志）
 docker compose logs --tail=100 rocketmq-namesrv rocketmq-broker
+
+# Seata（仅启用 seata profile 后可用）
+docker compose logs --tail=100 seata-server
 
 # Elasticsearch
 curl http://127.0.0.1:19200/_cluster/health
