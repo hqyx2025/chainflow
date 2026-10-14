@@ -12,6 +12,22 @@ jobs:
   verify:
     name: Maven verify
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      mysql:
+        image: mysql:8.0.36
+        env:
+          MYSQL_DATABASE: chainflow
+          MYSQL_USER: chainflow
+          MYSQL_PASSWORD: chainflow_dev
+          MYSQL_ROOT_PASSWORD: chainflow_root
+        ports:
+          - 13306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
 
     steps:
       - name: Check out source
@@ -25,8 +41,20 @@ jobs:
           cache: maven
 
       - name: Build and test
+        env:
+          CHAINFLOW_PURCHASE_IT: 'true'
         run: mvn --batch-mode --no-transfer-progress clean verify
 
       # Validate both Compose files without pulling images or starting services.
       - name: Validate Docker Compose configuration
         run: docker compose -f docker-compose.yml -f docker-compose.services.yml config --quiet
+
+      - name: Set up Python for API contract validation
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate OpenAPI contract
+        run: |
+          python -m pip install openapi-spec-validator==0.9.0
+          python -c "import yaml; from openapi_spec_validator import validate; validate(yaml.safe_load(open('docs/openapi.yaml', encoding='utf-8'))); print('OpenAPI valid')"

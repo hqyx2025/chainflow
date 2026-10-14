@@ -6,6 +6,7 @@ import com.chainflow.inventory.mapper.InventoryMapper;
 import com.chainflow.inventory.model.ReservationResult;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
@@ -74,7 +75,7 @@ public class InventoryController {
         }
     }
 
-    public record ReserveRequest(@NotBlank String orderId, @NotBlank String sku, @Positive Integer quantity) {}
-    public record ReceiveRequest(@Positive Long purchaseId, @NotBlank String sku, @Positive Integer quantity) {}
+    public record ReserveRequest(@NotBlank String orderId, @NotBlank String sku, @NotNull @Positive Integer quantity) {}
+    public record ReceiveRequest(@NotNull @Positive Long purchaseId, @NotBlank String sku, @NotNull @Positive Integer quantity) {}
     public record ReceiveResult(Long purchaseId, String sku, Integer quantity, Integer availableQuantity, String status) {}
 }

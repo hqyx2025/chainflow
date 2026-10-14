@@ -1,5 +1,10 @@
 FROM eclipse-temurin:17-jre
 
+# Compose health checks use curl against each application's Actuator endpoint.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # The JAR is produced by Maven before the image is built. Compose passes the

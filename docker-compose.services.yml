@@ -1,5 +1,11 @@
 name: chainflow
 
+x-service-healthcheck: &service-healthcheck
+  interval: 10s
+  timeout: 5s
+  retries: 12
+  start_period: 60s
+
 services:
   gateway:
     build:
@@ -9,6 +15,9 @@ services:
         JAR_FILE: chainflow-gateway/target/*.jar
     image: chainflow-gateway:local
     restart: unless-stopped
+    healthcheck:
+      <<: *service-healthcheck
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://127.0.0.1:8080/actuator/health"]
     ports:
       - "8080:8080"
     environment:
@@ -27,15 +36,15 @@ services:
       JWT_EXPIRATION_SECONDS: ${JWT_EXPIRATION_SECONDS:-7200}
     depends_on:
       auth:
-        condition: service_started
+        condition: service_healthy
       purchase:
-        condition: service_started
+        condition: service_healthy
       inventory:
-        condition: service_started
+        condition: service_healthy
       order:
-        condition: service_started
+        condition: service_healthy
       fulfillment:
-        condition: service_started
+        condition: service_healthy
       redis:
         condition: service_healthy
     networks:
@@ -49,6 +58,9 @@ services:
         JAR_FILE: chainflow-auth/target/*.jar
     image: chainflow-auth:local
     restart: unless-stopped
+    healthcheck:
+      <<: *service-healthcheck
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://127.0.0.1:9001/actuator/health"]
     expose:
       - "9001"
     environment:
@@ -76,6 +88,9 @@ services:
         JAR_FILE: chainflow-purchase/target/*.jar
     image: chainflow-purchase:local
     restart: unless-stopped
+    healthcheck:
+      <<: *service-healthcheck
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://127.0.0.1:9003/actuator/health"]
     expose:
       - "9003"
     environment:
@@ -102,6 +117,9 @@ services:
         JAR_FILE: chainflow-inventory/target/*.jar
     image: chainflow-inventory:local
     restart: unless-stopped
+    healthcheck:
+      <<: *service-healthcheck
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://127.0.0.1:9004/actuator/health"]
     expose:
       - "9004"
     environment:
@@ -127,6 +145,9 @@ services:
         JAR_FILE: chainflow-order/target/*.jar
     image: chainflow-order:local
     restart: unless-stopped
+    healthcheck:
+      <<: *service-healthcheck
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://127.0.0.1:9005/actuator/health"]
     expose:
       - "9005"
     environment:
@@ -158,6 +179,9 @@ services:
         JAR_FILE: chainflow-fulfillment/target/*.jar
     image: chainflow-fulfillment:local
     restart: unless-stopped
+    healthcheck:
+      <<: *service-healthcheck
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "--max-time", "3", "http://127.0.0.1:9006/actuator/health"]
     expose:
       - "9006"
     environment:

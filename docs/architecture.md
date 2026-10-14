@@ -236,7 +236,7 @@ CREATED ──reserve──> ALLOCATED ──startPick──> PICKING ──ship
 | `CF_IDEMPOTENCY_REUSED` | 409 | 幂等键对应不同请求体 |
 | `BUSINESS_RULE_VIOLATION` | 422 | 业务规则不满足 |
 
-网关过滤器解析 `Authorization: Bearer <token>` 并校验 JWT 与 Redis 吊销状态；匿名只开放登录、认证健康检查和 actuator。登出将 `jti` 写入 Redis，TTL 等于 JWT 剩余有效期。Redis 不可用时保护请求 fail-closed 返回 503。角色字段已写入 JWT，细粒度 `@PreAuthorize` 权限矩阵属于后续迭代。
+网关过滤器解析 `Authorization: Bearer <token>` 并校验 JWT 与 Redis 吊销状态；匿名入口只开放 POST 登录、GET 认证健康检查，网关 Actuator 仅公开 health。登出将 `jti` 写入 Redis，TTL 等于 JWT 剩余有效期。Redis 不可用时保护请求返回 503。网关已按角色限制采购、库存、订单和履约的写操作，具体矩阵见 `docs/api.md`；服务层的方法权限与多账号角色管理仍待实现。
 
 ## 9. MVP 验收顺序
 

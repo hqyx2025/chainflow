@@ -6,6 +6,8 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:16379}
       password: ${REDIS_PASSWORD:chainflow_redis}
+      connect-timeout: 2s
+      timeout: 2s
   main:
     web-application-type: reactive
   cloud:
@@ -37,7 +39,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,gateway
+        include: health
 server:
   port: 8080
 chainflow:

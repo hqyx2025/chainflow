@@ -1,0 +1,808 @@
+openapi: 3.0.3
+info:
+  title: ChainFlow API
+  version: 0.1.0
+  description: |
+    ChainFlow supply-chain API exposed through the gateway. Business endpoints
+    require a valid, non-revoked Bearer JWT. The login and auth health endpoints
+    are public. Business errors use HTTP 409 and an application-specific code.
+    The gateway rejects unauthorized requests with an empty HTTP 401 response,
+    denied business writes with an empty HTTP 403 response, and unavailable
+    revocation checks with an empty HTTP 503 response. These common gateway
+    responses apply to every protected operation.
+servers:
+  - url: http://localhost:8080
+    description: Local gateway (Docker Compose)
+tags:
+  - name: Auth
+  - name: Purchases
+  - name: Inventory
+  - name: Orders
+  - name: Fulfillments
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Sign in and issue a JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            example:
+              username: admin
+              password: admin123
+      responses:
+        '200':
+          description: Login result; invalid credentials are returned as AUTH-001.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseBase'
+                  - type: object
+                    properties:
+                      data:
+                        $ref: '#/components/schemas/LoginResult'
+              examples:
+                success:
+                  value:
+                    code: '0'
+                    message: OK
+                    data:
+                      accessToken: eyJhbGciOiJIUzI1NiJ9...
+                      tokenType: Bearer
+                      expiresIn: 7200
+                invalidCredentials:
+                  value:
+                    code: AUTH-001
+                    message: 用户名或密码错误
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke the current JWT
+      responses:
+        '200':
+          description: Token revoked until its expiration time.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoidResponse'
+        '401':
+          $ref: '#/components/responses/AuthServiceUnauthorized'
+        '503':
+          $ref: '#/components/responses/AuthServiceUnavailable'
+  /api/v1/auth/health:
+    get:
+      tags: [Auth]
+      summary: Auth service health check
+      security: []
+      responses:
+        '200':
+          description: Service is ready.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseBase'
+                  - type: object
+                    properties:
+                      data:
+                        type: string
+                        example: auth-service is ready
+  /api/v1/purchases:
+    post:
+      tags: [Purchases]
+      summary: Create a purchase order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePurchaseRequest'
+            example:
+              supplierCode: SUP-001
+              sku: SKU-DEMO-001
+              quantity: 20
+      responses:
+        '401':
+          $ref: '#/components/responses/GatewayUnauthorized'
+        '503':
+          $ref: '#/components/responses/GatewayUnavailable'
+        '403':
+          $ref: '#/components/responses/GatewayForbidden'
+        '200':
+          description: Purchase order created with status CREATED.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseOrderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/BusinessConflict'
+    get:
+      tags: [Purchases]
+      summary: List purchase orders
+      responses:
+        '401':
+          $ref: '#/components/responses/GatewayUnauthorized'
+        '503':
+          $ref: '#/components/responses/GatewayUnavailable'
+        '200':
+          description: Purchase orders, newest first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseOrderListResponse'
+  /api/v1/purchases/{purchaseId}/receive:
+    post:
+      tags: [Purchases]
+      summary: Receive a purchase order into inventory
+      description: |
+        Calls the inventory receipt endpoint and changes the purchase status to
+        RECEIVED. Repeating a successful receive is idempotent.
+      parameters:
+        - $ref: '#/components/parameters/PurchaseId'
+      responses:
+        '401':
+          $ref: '#/components/responses/GatewayUnauthorized'
+        '503':
+          $ref: '#/components/responses/GatewayUnavailable'
+        '403':
+          $ref: '#/components/responses/GatewayForbidden'
+        '200':
+          description: Purchase order after receipt.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PurchaseOrderResponse'
+        '409':
+          description: Purchase not found, invalid state, or inventory receipt failed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notFound:
+                  value:
+                    code: PUR-404
+                    message: 采购单不存在
+                invalidState:
+                  value:
+                    code: PUR-409
+                    message: 采购单当前状态不允许入库
+  /api/v1/inventory/reservations:
+    post:
+      tags: [Inventory]
+      summary: Reserve inventory for an order
+      description: |
+        Atomically decreases available stock and increases reserved stock.
+        The orderId is the idempotency key; retries must use the original SKU
+        and quantity.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReserveInventoryRequest'
+            example:
+              orderId: CF-1234567890ABCDEF
+              sku: SKU-DEMO-001
+              quantity: 2
+      responses:
+        '401':
+          $ref: '#/components/responses/GatewayUnauthorized'
+        '503':
+          $ref: '#/components/responses/GatewayUnavailable'
+        '403':
+          $ref: '#/components/responses/GatewayForbidden'
+        '200':
+          description: Inventory reservation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReservationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Insufficient stock or an idempotency payload mismatch.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                insufficientStock:
+                  value:
+                    code: INV-001
+                    message: 库存不足
+                idempotencyConflict:
+                  value:
+                    code: INV-409
+                    message: 同一订单的库存预占 SKU 或数量与首次请求不一致
+  /api/v1/inventory/receipts:
+    post:
+      tags: [Inventory]
+      summary: Receive stock for a purchase order
+      description: purchaseId is the idempotency key. A repeated request must have the same SKU and quantity.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReceiveInventoryRequest'
+            example:
+              purchaseId: 42
+              sku: SKU-DEMO-001
+              quantity: 20
+      responses:
+        '401':
+          $ref: '#/components/responses/GatewayUnauthorized'
+        '503':
+          $ref: '#/components/responses/GatewayUnavailable'
+        '403':
+          $ref: '#/components/responses/GatewayForbidden'
+        '200':
+          description: Stock receipt result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Receipt retry payload mismatch, receipt contention, or missing SKU.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /api/v1/inventory/receive:
+    post:
+      tags: [Inventory]
+      summary: Receive stock (legacy alias)
+      description: Same operation and schema as POST /api/v1/inventory/receipts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReceiveInventoryRequest'
+      responses:
+        '401':
+          $ref: '#/components/responses/GatewayUnauthorized'
+        '503':
+          $ref: '#/components/responses/GatewayUnavailable'
+        '403':
+          $ref: '#/components/responses/GatewayForbidden'
+        '200':
+          description: Stock receipt result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiptResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/BusinessConflict'
+  /api/v1/inventory/{sku}:
+    get:
+      tags: [Inventory]
+      summary: Get inventory by SKU
+      parameters:
+        - name: sku
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '401':
+          $ref: '#/components/responses/GatewayUnauthorized'
+        '503':
+          $ref: '#/components/responses/GatewayUnavailable'
+        '200':
+          description: Inventory item. The data field is omitted when the SKU does not exist.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseBase'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/InventoryItem'
+                        nullable: true
+  /api/v1/orders:
+    post:
+      tags: [Orders]
+      summary: Create an unpaid order
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+            example:
+              sku: SKU-DEMO-001
+              quantity: 2
+      responses:
+        '401':
+          $ref: '#/components/responses/GatewayUnauthorized'
+        '503':
+          $ref: '#/components/responses/GatewayUnavailable'
+        '403':
+          $ref: '#/components/responses/GatewayForbidden'
+        '200':
+          description: New order with paymentStatus PENDING_PAYMENT.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /api/v1/orders/{orderId}:
+    get:
+      tags: [Orders]
+      summary: Get an order
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '401':
+          $ref: '#/components/responses/GatewayUnauthorized'
+        '503':
+          $ref: '#/components/responses/GatewayUnavailable'
+        '200':
+          description: Order. The data field is omitted when the order does not exist.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseBase'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/SalesOrder'
+                        nullable: true
+  /api/v1/orders/{orderId}/pay:
+    post:
+      tags: [Orders]
+      summary: Pay an order and start fulfillment
+      description: |
+        Demo payment operation. Reserves inventory, creates a fulfillment order,
+        then changes paymentStatus to PAID and fulfillmentStatus to FULFILLING.
+        Repeating the request after success returns the existing order.
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '401':
+          $ref: '#/components/responses/GatewayUnauthorized'
+        '503':
+          $ref: '#/components/responses/GatewayUnavailable'
+        '403':
+          $ref: '#/components/responses/GatewayForbidden'
+        '200':
+          description: Paid order with fulfillment started.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderResponse'
+        '409':
+          description: Order missing, inventory reservation failed, or fulfillment unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                notFound:
+                  value:
+                    code: ORD-404
+                    message: 订单不存在
+                reservationFailed:
+                  value:
+                    code: ORD-002
+                    message: 库存预占失败
+                fulfillmentFailed:
+                  value:
+                    code: ORD-003
+                    message: 支付成功但履约服务暂不可用，请稍后重试
+  /api/v1/fulfillments:
+    post:
+      tags: [Fulfillments]
+      summary: Create or retrieve fulfillment for an order
+      description: orderId is unique; repeating the request returns the existing fulfillment.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFulfillmentRequest'
+            example:
+              orderId: CF-1234567890ABCDEF
+              carrierCode: STANDARD
+      responses:
+        '401':
+          $ref: '#/components/responses/GatewayUnauthorized'
+        '503':
+          $ref: '#/components/responses/GatewayUnavailable'
+        '403':
+          $ref: '#/components/responses/GatewayForbidden'
+        '200':
+          description: Existing or newly created fulfillment order.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FulfillmentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/BusinessConflict'
+  /api/v1/fulfillments/{fulfillmentId}/status:
+    patch:
+      tags: [Fulfillments]
+      summary: Update fulfillment status
+      parameters:
+        - name: fulfillmentId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: true
+          description: Status value to store.
+          schema:
+            type: string
+            example: SHIPPED
+      responses:
+        '401':
+          $ref: '#/components/responses/GatewayUnauthorized'
+        '503':
+          $ref: '#/components/responses/GatewayUnavailable'
+        '403':
+          $ref: '#/components/responses/GatewayForbidden'
+        '200':
+          description: Updated fulfillment. The data field is omitted when the ID does not exist.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponseBase'
+                  - type: object
+                    properties:
+                      data:
+                        allOf:
+                          - $ref: '#/components/schemas/FulfillmentOrder'
+                        nullable: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    PurchaseId:
+      name: purchaseId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+  responses:
+    GatewayUnauthorized:
+      description: Gateway rejected a missing, invalid, expired, or revoked JWT. The response body is empty.
+    GatewayForbidden:
+      description: Gateway rejected a business write because the JWT role is not allowed. The response body is empty.
+    GatewayUnavailable:
+      description: Gateway could not check JWT revocation. The response body is empty.
+    BadRequest:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: '400'
+            message: 请求参数不合法
+    BusinessConflict:
+      description: Business rule rejected the request. HTTP status is 409; code identifies the condition.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: INV-001
+            message: 库存不足
+    AuthServiceUnauthorized:
+      description: Auth service rejected a missing, invalid, or expired Bearer token. When the gateway rejects the token first, it returns the same HTTP status with an empty body.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: '401'
+            message: JWT 无效或已过期
+    AuthServiceUnavailable:
+      description: JWT revocation store unavailable; the auth service returns the standard response envelope. When the gateway revocation check fails first, it returns the same HTTP status with an empty body.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: '503'
+            message: JWT 注销服务暂不可用，请稍后重试
+  schemas:
+    ApiResponseBase:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: '0 means success; nonzero values identify an error.'
+          example: '0'
+        message:
+          type: string
+          example: OK
+        traceId:
+          type: string
+          nullable: true
+          description: Request trace identifier. Also returned in the X-Trace-Id response header by servlet services.
+    ErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties:
+            data:
+              nullable: true
+    VoidResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties:
+            data:
+              nullable: true
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+    LoginResult:
+      type: object
+      required: [accessToken, tokenType, expiresIn]
+      properties:
+        accessToken:
+          type: string
+        tokenType:
+          type: string
+          example: Bearer
+        expiresIn:
+          type: integer
+          format: int64
+          description: Token lifetime in seconds.
+    CreatePurchaseRequest:
+      type: object
+      required: [supplierCode, sku, quantity]
+      properties:
+        supplierCode:
+          type: string
+          minLength: 1
+        sku:
+          type: string
+          minLength: 1
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+    PurchaseOrder:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        supplierCode:
+          type: string
+        sku:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        status:
+          type: string
+          enum: [CREATED, RECEIVED]
+        createdAt:
+          type: string
+          example: '2026-10-14T10:30:00'
+    PurchaseOrderResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/PurchaseOrder'
+    PurchaseOrderListResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/PurchaseOrder'
+    ReserveInventoryRequest:
+      type: object
+      required: [orderId, sku, quantity]
+      properties:
+        orderId:
+          type: string
+          minLength: 1
+        sku:
+          type: string
+          minLength: 1
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+    Reservation:
+      type: object
+      properties:
+        reservationId:
+          type: string
+        sku:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        status:
+          type: string
+          example: RESERVED
+    ReservationResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Reservation'
+    ReceiveInventoryRequest:
+      type: object
+      required: [purchaseId, sku, quantity]
+      properties:
+        purchaseId:
+          type: integer
+          format: int64
+          minimum: 1
+        sku:
+          type: string
+          minLength: 1
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+    Receipt:
+      type: object
+      properties:
+        purchaseId:
+          type: integer
+          format: int64
+        sku:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        availableQuantity:
+          type: integer
+          format: int32
+          nullable: true
+        status:
+          type: string
+          example: RECEIVED
+    ReceiptResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/Receipt'
+    InventoryItem:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        sku:
+          type: string
+        availableQuantity:
+          type: integer
+          format: int32
+        reservedQuantity:
+          type: integer
+          format: int32
+    CreateOrderRequest:
+      type: object
+      required: [sku, quantity]
+      properties:
+        sku:
+          type: string
+          minLength: 1
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+    SalesOrder:
+      type: object
+      properties:
+        orderId:
+          type: string
+        sku:
+          type: string
+        quantity:
+          type: integer
+          format: int32
+        paymentStatus:
+          type: string
+          enum: [PENDING_PAYMENT, PAID]
+        fulfillmentStatus:
+          type: string
+          enum: [CREATED, READY_FOR_FULFILLMENT, FULFILLING]
+        createdAt:
+          type: string
+          example: '2026-10-14T10:30:00'
+    OrderResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/SalesOrder'
+    CreateFulfillmentRequest:
+      type: object
+      required: [orderId, carrierCode]
+      properties:
+        orderId:
+          type: string
+          minLength: 1
+        carrierCode:
+          type: string
+          minLength: 1
+    FulfillmentOrder:
+      type: object
+      properties:
+        fulfillmentId:
+          type: string
+        orderId:
+          type: string
+        carrierCode:
+          type: string
+        status:
+          type: string
+          example: CREATED
+        createdAt:
+          type: string
+          example: '2026-10-14T10:30:00'
+    FulfillmentResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponseBase'
+        - type: object
+          properties:
+            data:
+              $ref: '#/components/schemas/FulfillmentOrder'

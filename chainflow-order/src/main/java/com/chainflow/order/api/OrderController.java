@@ -8,6 +8,7 @@ import com.chainflow.order.model.SalesOrder;
 import io.seata.spring.annotation.GlobalTransactional;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -107,7 +108,7 @@ public class OrderController {
     }
     @GetMapping("/{orderId}")
     public ApiResponse<SalesOrder> get(@PathVariable String orderId) { return ApiResponse.success(mapper.findById(orderId)); }
-    public record CreateOrderRequest(@NotBlank String sku, @Positive Integer quantity) {}
+    public record CreateOrderRequest(@NotBlank String sku, @NotNull @Positive Integer quantity) {}
     private record ReserveRequest(String orderId, String sku, Integer quantity) {}
     private record CreateFulfillmentRequest(String orderId, String carrierCode) {}
 }

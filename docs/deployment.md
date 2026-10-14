@@ -17,7 +17,7 @@ Compose 文件位于仓库根目录，RocketMQ Broker 配置位于 `infra/rocket
 
 ## 构建并启动业务服务容器
 
-业务服务使用 `docker/Dockerfile.service`，镜像内只包含已经由 Maven 打包的 Spring Boot JAR。先完成打包，再用基础设施 Compose 文件和业务服务覆盖文件一起启动：
+业务服务使用 `docker/Dockerfile.service`，镜像包含已经由 Maven 打包的 Spring Boot JAR 和用于健康检查的 `curl`。先完成打包，再用基础设施 Compose 文件和业务服务覆盖文件一起启动：
 
 ```bash
 # 编译并生成六个可执行 JAR（跳过测试可缩短本地构建时间）
@@ -32,9 +32,13 @@ docker compose -f docker-compose.yml -f docker-compose.services.yml ps
 docker compose -f docker-compose.yml -f docker-compose.services.yml logs -f gateway
 ```
 
-覆盖文件把服务加入现有 `chainflow` 网络：容器内使用 `mysql:3306`、`redis:6379` 和各服务名（例如 `http://inventory:9004`）互相访问。业务服务等待 MySQL/Redis 健康检查通过后启动；网关等待各业务容器启动。覆盖文件只将网关的 `8080` 发布到宿主机，认证、采购、库存、订单和履约服务使用 `expose` 保持为网络内部端口，因此宿主机客户端应统一访问 `http://localhost:8080`。容器模式默认将 `NACOS_ENABLED`、`SEATA_ENABLED`、`ROCKETMQ_ENABLED` 设为 `false`，无需启动这些可选组件即可运行基础链路。需要启用时，可在 `.env` 或当前 shell 中覆盖对应变量，并启动相应基础设施 profile。
+覆盖文件把服务加入现有 `chainflow` 网络：容器内使用 `mysql:3306`、`redis:6379` 和各服务名（例如 `http://inventory:9004`）互相访问。业务服务等待 MySQL/Redis 健康检查通过后启动；网关等待认证、采购、库存、订单和履约服务的 `/actuator/health` 全部通过后启动。六个业务容器每 10 秒检查一次各自健康端点，单次请求最长 3 秒，启动宽限期为 60 秒，连续失败 12 次后标记为 `unhealthy`。健康端点会检查各服务已配置的 MySQL 或 Redis 连接。覆盖文件只将网关的 `8080` 发布到宿主机，认证、采购、库存、订单和履约服务使用 `expose` 保持为网络内部端口，因此宿主机客户端应统一访问 `http://localhost:8080`。容器模式默认将 `NACOS_ENABLED`、`SEATA_ENABLED`、`ROCKETMQ_ENABLED` 设为 `false`，无需启动这些可选组件即可运行基础链路。需要启用时，可在 `.env` 或当前 shell 中覆盖对应变量，并启动相应基础设施 profile。
+
+需要命令等待所有容器就绪时，启动命令可使用 `up --build --wait --wait-timeout 240` 代替 `up -d --build`。`docker compose ps` 中六个业务服务应显示 `healthy`；运行期间健康状态变化不会自动重启容器，可结合服务日志排查连接或启动错误。
 
 认证服务和网关共用 Redis 保存 JWT 吊销记录。调用 `/api/v1/auth/logout` 后，原 Token 会在剩余有效期内被网关拒绝；Redis 暂时不可用时，网关对保护请求返回 HTTP 503，避免在无法确认吊销状态时放行请求。
+
+接口契约保存在 [`openapi.yaml`](openapi.yaml)，以 `http://localhost:8080` 为默认服务地址，可导入 Postman、Apifox 或 Swagger Editor 查看并发起请求。应用不提供 `/swagger-ui` 或 `/v3/api-docs` 页面；统一响应、错误码及角色权限说明见 [`api.md`](api.md)。业务服务未发布宿主机端口，导入契约后应始终通过网关执行联调。
 
 停止业务和基础设施容器（保留数据卷）：
 
@@ -76,7 +80,7 @@ docker compose down
 docker compose down -v
 ```
 
-首次启动镜像下载和 Elasticsearch 初始化可能需要几分钟。使用 `docker compose ps` 确认基础设施进入 `running`，使用合并 Compose 文件的 `ps` 确认业务容器已启动。
+首次启动镜像下载和 Elasticsearch 初始化可能需要几分钟。使用 `docker compose ps` 确认基础设施进入 `running`，使用合并 Compose 文件的 `ps` 确认六个业务容器均已进入 `healthy`。
 
 ## 服务地址与连接参数
 
@@ -119,7 +123,7 @@ seata:
   tx-service-group: chainflow_tx_group
 ```
 
-订单服务当前通过 `SEATA_ENABLED` 控制 Seata 客户端，默认值为 `false`。启用本地 Seata 时，先启动 profile，再在启动订单服务的同一 shell 中设置环境变量：
+订单服务通过 `SEATA_ENABLED` 控制 Seata 客户端，默认值为 `false`。以下命令用于启动开发用 Seata 基础设施与客户端；当前仍需补齐事务组映射、跨服务 XID 传播和 `undo_log`，此配置尚未完成分布式回滚验证。
 
 ```bash
 docker compose --profile seata up -d seata-server
@@ -133,7 +137,7 @@ $env:SEATA_ENABLED = "true"
 mvn -f chainflow-order/pom.xml spring-boot:run
 ```
 
-关闭 Seata 或恢复默认轻量开发模式时，将 `SEATA_ENABLED` 设为 `false`（或取消该环境变量），并执行 `docker compose --profile seata stop seata-server`。当前客户端使用 `chainflow_tx_group`，默认连接本机 `8091`；Compose 已将 Seata 事务端口保持为 `8091:8091`，因此无需额外覆盖客户端地址。Seata 使用 AT 模式时，各业务库还需要对应的 `undo_log` 表，正式环境应改用数据库存储、认证和独立凭据。
+关闭开发用 Seata 时，将 `SEATA_ENABLED` 设为 `false`（或取消该环境变量），并执行 `docker compose --profile seata stop seata-server`。客户端使用 `chainflow_tx_group`，服务地址预设为本机 `8091`。Seata AT 模式还需各参与服务配置数据源代理、`undo_log` 和 XID 传播；当前库存与履约服务尚未接入。正式部署需补齐这些集成并验证回滚，再切换到数据库存储与认证。
 
 ## 修改默认密码和端口
 
@@ -150,6 +154,13 @@ REDIS_PASSWORD=change-me-redis
 ## 就绪检查与故障排查
 
 ```bash
+# 网关及其 Redis 连接
+curl --fail http://127.0.0.1:8080/actuator/health
+
+# 内部业务服务（通过容器内已安装的 curl 访问）
+docker compose -f docker-compose.yml -f docker-compose.services.yml exec auth curl --fail http://127.0.0.1:9001/actuator/health
+docker compose -f docker-compose.yml -f docker-compose.services.yml logs --tail=100 auth purchase inventory order fulfillment gateway
+
 # MySQL
 docker compose exec mysql mysqladmin ping -u root -p
 

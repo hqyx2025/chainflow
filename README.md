@@ -78,10 +78,13 @@ ChainFlow 是一个面向采购、库存、订单与履约的 Java 微服务项�
 
 仓库包含 GitHub Actions 工作流 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)，在推送到 `main` 或创建/更新 Pull Request 时自动执行：
 
-- 使用 Temurin Java 17 和 Maven 构建缓存运行 `mvn clean verify`；
+- 使用 Temurin Java 17 和 Maven 构建缓存运行 `mvn clean verify`，包括独立 MySQL 8 中的采购集成测试；
 - 校验基础设施与业务服务的合并 Docker Compose 配置，不拉取镜像，也不启动服务。
+- 使用 OpenAPI 规范验证器校验静态接口契约。
 
 ## 接口演示
+
+接口请求/响应、JWT 角色和错误码见 [`docs/api.md`](docs/api.md)；可将 [`docs/openapi.yaml`](docs/openapi.yaml) 导入 Postman、Apifox 或 Swagger Editor 查看完整 OpenAPI 3.0 契约。当前使用静态契约，应用不提供 Swagger UI 页面。
 
 默认演示账号为 `admin/admin123`，可通过环境变量 `CHAINFLOW_DEMO_USERNAME`、`CHAINFLOW_DEMO_PASSWORD` 修改。
 
@@ -113,4 +116,6 @@ curl -X POST http://localhost:8080/api/v1/auth/logout \
 
 ## 当前边界
 
-本阶段重点是可运行的微服务骨架和核心链路。订单服务已预留 Seata `@GlobalTransactional` 边界和 RocketMQ `chainflow-order-paid` 事件，默认关闭以便本地只启动 MySQL/Redis；设置 `SEATA_ENABLED=true`、`ROCKETMQ_ENABLED=true` 并启动对应基础设施即可启用。Elasticsearch 已在 Compose 中提供，后续接入检索读模型。生产环境还需要更换 JWT 密钥、数据库密码、镜像凭据，并补充 HTTPS、密钥管理和完整鉴权。
+当前业务通过 REST 调用与服务内事务实现演示闭环。订单服务包含 Seata 事务入口与 RocketMQ 发布代码，默认关闭；跨服务 XID 传播、`undo_log`、事务组映射和 Outbox 仍需实现与验证，单独打开环境变量尚不能保证分布式事务或消息一致性。Elasticsearch 目前提供基础设施，检索读模型待接入。生产部署还需替换演示账号、JWT 密钥与默认凭据。
+
+真实容器回归可运行 `pwsh -File scripts/smoke.ps1`，步骤和数据副作用见 [`docs/verification.md`](docs/verification.md)。

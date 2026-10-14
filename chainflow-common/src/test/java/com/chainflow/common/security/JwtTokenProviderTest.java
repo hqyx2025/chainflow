@@ -21,6 +21,15 @@ class JwtTokenProviderTest {
         var claims = provider.parse(token);
         assertEquals("operator", claims.getSubject());
         assertEquals("SUPPLY_CHAIN_OPERATOR", claims.get("role", String.class));
+        assertEquals("SUPPLY_CHAIN_OPERATOR", provider.getRole(claims));
+    }
+
+    @Test
+    void normalizesRoleClaimAndDoesNotInventAMissingRole() {
+        assertEquals("WAREHOUSE", provider.getRole(provider.createToken("operator", " warehouse ")));
+        assertNull(provider.getRole(provider.createToken("operator", null)));
+        assertNull(provider.getRole(provider.createToken("operator", " ")));
+        assertNull(provider.getRole(io.jsonwebtoken.Jwts.claims().add("role", 42).build()));
     }
 
     @Test

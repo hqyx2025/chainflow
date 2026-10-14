@@ -5,6 +5,7 @@ import com.chainflow.purchase.model.PurchaseOrder;
 import com.chainflow.purchase.service.PurchaseService;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
@@ -22,5 +23,5 @@ public class PurchaseController {
     public ApiResponse<PurchaseOrder> receive(@PathVariable Long purchaseId) {
         return ApiResponse.success(service.receive(purchaseId));
     }
-    public record CreatePurchaseRequest(@NotBlank String supplierCode, @NotBlank String sku, @Positive Integer quantity) {}
+    public record CreatePurchaseRequest(@NotBlank String supplierCode, @NotBlank String sku, @NotNull @Positive Integer quantity) {}
 }

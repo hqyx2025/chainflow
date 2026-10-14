@@ -6,6 +6,8 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:16379}
       password: ${REDIS_PASSWORD:chainflow_redis}
+      connect-timeout: 2s
+      timeout: 2s
   cloud:
     nacos:
       discovery:
