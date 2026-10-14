@@ -8,6 +8,7 @@ import io.jsonwebtoken.JwtException;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -24,15 +25,32 @@ public class AuthController {
     private final RevocationService revocationService;
 
     public AuthController(JwtTokenProvider tokenProvider,
+                          String demoUsername,
+                          String demoPassword,
+                          long expirationSeconds) {
+        this(tokenProvider, demoUsername, demoPassword, expirationSeconds, (RevocationService) null);
+    }
+
+    @Autowired
+    public AuthController(JwtTokenProvider tokenProvider,
                           @Value("${chainflow.demo.username:admin}") String demoUsername,
                           @Value("${chainflow.demo.password:admin123}") String demoPassword,
                           @Value("${chainflow.security.expiration-seconds:7200}") long expirationSeconds,
                           ObjectProvider<RevocationService> revocationServiceProvider) {
+        this(tokenProvider, demoUsername, demoPassword, expirationSeconds,
+                revocationServiceProvider.getIfAvailable());
+    }
+
+    private AuthController(JwtTokenProvider tokenProvider,
+                           String demoUsername,
+                           String demoPassword,
+                           long expirationSeconds,
+                           RevocationService revocationService) {
         this.tokenProvider = tokenProvider;
         this.demoUsername = demoUsername;
         this.demoPassword = demoPassword;
         this.expirationSeconds = expirationSeconds;
-        this.revocationService = revocationServiceProvider.getIfAvailable();
+        this.revocationService = revocationService;
     }
 
     @PostMapping("/login")

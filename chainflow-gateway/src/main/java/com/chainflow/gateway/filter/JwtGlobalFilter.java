@@ -11,6 +11,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
@@ -18,6 +19,12 @@ import reactor.core.publisher.Mono;
 public class JwtGlobalFilter implements GlobalFilter, Ordered {
     private final JwtTokenProvider tokenProvider;
     private final RevocationService revocationService;
+    public JwtGlobalFilter(JwtTokenProvider tokenProvider) {
+        this.tokenProvider = tokenProvider;
+        this.revocationService = null;
+    }
+
+    @Autowired
     public JwtGlobalFilter(JwtTokenProvider tokenProvider, ObjectProvider<RevocationService> revocationServiceProvider) {
         this.tokenProvider = tokenProvider;
         this.revocationService = revocationServiceProvider.getIfAvailable();
