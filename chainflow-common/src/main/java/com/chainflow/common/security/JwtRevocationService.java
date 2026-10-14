@@ -53,8 +53,10 @@ public final class JwtRevocationService implements RevocationService {
     }
 
     private String key(String token, Claims claims) {
-        String identity = claims.getId() == null ? "token:" + token : "jti:" + claims.getId();
-        return KEY_PREFIX + sha256(identity);
+        if (claims.getId() != null) {
+            return KEY_PREFIX + "jti:" + claims.getId();
+        }
+        return KEY_PREFIX + "token:" + sha256(token);
     }
 
     private String sha256(String value) {
