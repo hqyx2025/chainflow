@@ -1,6 +1,11 @@
 spring:
   application:
     name: chainflow-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:16379}
+      password: ${REDIS_PASSWORD:chainflow_redis}
   main:
     web-application-type: reactive
   cloud:

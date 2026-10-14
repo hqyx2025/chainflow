@@ -3,6 +3,7 @@ package com.chainflow.common.web;
 import com.chainflow.common.api.ApiResponse;
 import com.chainflow.common.exception.BusinessException;
 import com.chainflow.common.exception.GlobalErrorCode;
+import com.chainflow.common.security.RevocationStoreUnavailableException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +16,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> business(BusinessException ex) {
         return ResponseEntity.status(409).body(ApiResponse.failure(ex.getCode(), ex.getMessage(), traceId()));
+    }
+
+    @ExceptionHandler(RevocationStoreUnavailableException.class)
+    public ResponseEntity<ApiResponse<Void>> revocationUnavailable(RevocationStoreUnavailableException ex) {
+        return ResponseEntity.status(503).body(ApiResponse.failure("503", ex.getMessage(), traceId()));
     }
 
     @ExceptionHandler({MethodArgumentNotValidException.class, ConstraintViolationException.class})

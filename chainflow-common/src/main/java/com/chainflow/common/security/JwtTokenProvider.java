@@ -8,6 +8,7 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
+import java.util.UUID;
 
 public final class JwtTokenProvider {
     private final SecretKey key;
@@ -24,6 +25,7 @@ public final class JwtTokenProvider {
     public String createToken(String subject, String role) {
         Instant now = Instant.now();
         return Jwts.builder()
+                .id(UUID.randomUUID().toString())
                 .subject(subject)
                 .claim("role", role)
                 .issuedAt(Date.from(now))
@@ -33,6 +35,10 @@ public final class JwtTokenProvider {
     }
 
     public Claims parse(String token) {
-        return Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
+        Claims claims = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
+        if (claims.getExpiration() == null) {
+            throw new IllegalArgumentException("JWT expiration is required");
+        }
+        return claims;
     }
 }

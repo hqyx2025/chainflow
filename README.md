@@ -74,6 +74,13 @@ ChainFlow 是一个面向采购、库存、订单与履约的 Java 微服务项�
    docker compose -f docker-compose.yml -f docker-compose.services.yml config --quiet
    ```
 
+## 持续集成
+
+仓库包含 GitHub Actions 工作流 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)，在推送到 `main` 或创建/更新 Pull Request 时自动执行：
+
+- 使用 Temurin Java 17 和 Maven 构建缓存运行 `mvn clean verify`；
+- 校验基础设施与业务服务的合并 Docker Compose 配置，不拉取镜像，也不启动服务。
+
 ## 接口演示
 
 默认演示账号为 `admin/admin123`，可通过环境变量 `CHAINFLOW_DEMO_USERNAME`、`CHAINFLOW_DEMO_PASSWORD` 修改。
@@ -95,6 +102,10 @@ curl -X POST http://localhost:8080/api/v1/orders/{orderId}/pay \
 
 # 4. 采购入库（采购单创建后调用，库存会增加且重复调用幂等）
 curl -X POST http://localhost:8080/api/v1/purchases/{purchaseId}/receive \
+  -H "Authorization: Bearer $TOKEN"
+
+# 5. 注销 Token；之后该 Token 通过网关访问业务接口会返回 401
+curl -X POST http://localhost:8080/api/v1/auth/logout \
   -H "Authorization: Bearer $TOKEN"
 ```
 

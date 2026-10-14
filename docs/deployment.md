@@ -34,6 +34,8 @@ docker compose -f docker-compose.yml -f docker-compose.services.yml logs -f gate
 
 覆盖文件把服务加入现有 `chainflow` 网络：容器内使用 `mysql:3306`、`redis:6379` 和各服务名（例如 `http://inventory:9004`）互相访问。业务服务等待 MySQL/Redis 健康检查通过后启动；网关等待各业务容器启动。覆盖文件只将网关的 `8080` 发布到宿主机，认证、采购、库存、订单和履约服务使用 `expose` 保持为网络内部端口，因此宿主机客户端应统一访问 `http://localhost:8080`。容器模式默认将 `NACOS_ENABLED`、`SEATA_ENABLED`、`ROCKETMQ_ENABLED` 设为 `false`，无需启动这些可选组件即可运行基础链路。需要启用时，可在 `.env` 或当前 shell 中覆盖对应变量，并启动相应基础设施 profile。
 
+认证服务和网关共用 Redis 保存 JWT 吊销记录。调用 `/api/v1/auth/logout` 后，原 Token 会在剩余有效期内被网关拒绝；Redis 暂时不可用时，网关对保护请求返回 HTTP 503，避免在无法确认吊销状态时放行请求。
+
 停止业务和基础设施容器（保留数据卷）：
 
 ```bash
