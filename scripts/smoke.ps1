@@ -8,17 +8,22 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $BaseUrl = $BaseUrl.TrimEnd('/')
+$traceId = 'smoke-' + [guid]::NewGuid().ToString('N')
 
 function Invoke-Check {
     param([string]$Method, [string]$Path, [string]$Token = '', [object]$Body = $null,
           [int]$ExpectedStatus = 200, [string]$ExpectedCode = '0')
     $parameters = @{ Uri = "$BaseUrl$Path"; Method = $Method; TimeoutSec = 15; SkipHttpErrorCheck = $true }
-    if ($Token) { $parameters.Headers = @{ Authorization = "Bearer $Token" } }
+    $parameters.Headers = @{ 'X-Trace-Id' = $traceId }
+    if ($Token) { $parameters.Headers.Authorization = "Bearer $Token" }
     if ($null -ne $Body) {
         $parameters.ContentType = 'application/json'
         $parameters.Body = ConvertTo-Json -InputObject $Body -Compress
     }
     $response = Invoke-WebRequest @parameters
+    if (($response.Headers['X-Trace-Id'] -join ',') -ne $traceId) {
+        throw "$Method $Path did not preserve the trace identifier"
+    }
     if ([int]$response.StatusCode -ne $ExpectedStatus) {
         throw "$Method $Path expected HTTP $ExpectedStatus, received $($response.StatusCode): $($response.Content)"
     }
@@ -50,6 +55,17 @@ $null = Invoke-Check POST '/api/v1/inventory/reservations' -Token $token -Body @
     orderId = $order.orderId; sku = $Sku; quantity = 3
 } -ExpectedStatus 409 -ExpectedCode 'INV-409'
 
+$fulfillment = Invoke-Check POST '/api/v1/fulfillments' -Token $token -Body @{
+    orderId = $order.orderId; carrierCode = 'STANDARD'
+}
+$null = Invoke-Check PATCH "/api/v1/fulfillments/$($fulfillment.fulfillmentId)/status?status=COMPLETED" -Token $token -ExpectedStatus 409 -ExpectedCode 'FUL-409'
+foreach ($nextStatus in @('PICKING', 'PACKED', 'SHIPPED', 'COMPLETED', 'COMPLETED')) {
+    $updatedFulfillment = Invoke-Check PATCH "/api/v1/fulfillments/$($fulfillment.fulfillmentId)/status?status=$nextStatus" -Token $token
+    if ($updatedFulfillment.status -ne $nextStatus) { throw 'Fulfillment transition mismatch' }
+}
+$null = Invoke-Check PATCH "/api/v1/fulfillments/$($fulfillment.fulfillmentId)/status?status=PICKING" -Token $token -ExpectedStatus 409 -ExpectedCode 'FUL-409'
+$null = Invoke-Check PATCH '/api/v1/fulfillments/FUL-missing/status?status=PICKING' -Token $token -ExpectedStatus 409 -ExpectedCode 'FUL-404'
+
 $purchase = Invoke-Check POST '/api/v1/purchases' -Token $token -Body @{
     supplierCode = 'SMOKE-SUPPLIER'; sku = $Sku; quantity = 5
 }
@@ -76,6 +92,8 @@ $null = Invoke-Check POST '/api/v1/auth/logout' -Token $freshLogin.accessToken
     PurchaseId = $purchase.id
     Payment = $paid.paymentStatus
     Fulfillment = $paid.fulfillmentStatus
+    FulfillmentRecordStatus = $updatedFulfillment.status
+    TraceId = $traceId
     AvailableBefore = $before.availableQuantity
     AvailableAfter = $afterReceipt.availableQuantity
     ReservedAfter = $afterReceipt.reservedQuantity

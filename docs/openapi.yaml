@@ -464,9 +464,10 @@ paths:
         - name: status
           in: query
           required: true
-          description: Status value to store.
+          description: Sequential progression CREATED to PICKING to PACKED to SHIPPED to COMPLETED. Cancellation is permitted before SHIPPED. Repeating the current status is idempotent.
           schema:
             type: string
+            enum: [CREATED, PICKING, PACKED, SHIPPED, COMPLETED, CANCELLED]
             example: SHIPPED
       responses:
         '401':
@@ -476,7 +477,7 @@ paths:
         '403':
           $ref: '#/components/responses/GatewayForbidden'
         '200':
-          description: Updated fulfillment. The data field is omitted when the ID does not exist.
+          description: Updated fulfillment. An identical repeated status returns the existing record.
           content:
             application/json:
               schema:
@@ -490,6 +491,8 @@ paths:
                         nullable: true
         '400':
           $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/BusinessConflict'
 components:
   securitySchemes:
     bearerAuth:
@@ -562,7 +565,7 @@ components:
         traceId:
           type: string
           nullable: true
-          description: Request trace identifier. Also returned in the X-Trace-Id response header by servlet services.
+          description: Request trace identifier. Also returned in the X-Trace-Id response header by the gateway and servlet services, and propagated to downstream HTTP services.
     ErrorResponse:
       allOf:
         - $ref: '#/components/schemas/ApiResponseBase'

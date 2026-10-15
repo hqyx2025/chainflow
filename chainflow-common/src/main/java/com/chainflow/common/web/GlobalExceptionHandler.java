@@ -6,6 +6,8 @@ import com.chainflow.common.exception.GlobalErrorCode;
 import com.chainflow.common.security.RevocationStoreUnavailableException;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.MDC;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -16,6 +18,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Void>> business(BusinessException ex) {
         return ResponseEntity.status(409).body(ApiResponse.failure(ex.getCode(), ex.getMessage(), traceId()));
@@ -35,6 +38,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> unexpected(Exception ex) {
+        log.error("Unhandled request failure", ex);
         return ResponseEntity.internalServerError().body(ApiResponse.failure(GlobalErrorCode.INTERNAL_ERROR, "服务内部错误", traceId()));
     }
 

@@ -67,11 +67,48 @@ public class OrderController {
         SalesOrder order = mapper.findById(orderId);
         if (order == null) throw new BusinessException("ORD-404", "订单不存在");
         if ("PAID".equals(order.paymentStatus()) && "FULFILLING".equals(order.fulfillmentStatus())) {
+            // Payment and fulfillment state are durable before the response is
+            // returned. A client retry can reattempt publication after a
+            // timeout or broker failure; no durable outbox exists yet.
+            publishPaidEvent(order);
             return ApiResponse.success(order);
         }
 
-        boolean newlyPaid = false;
+        SalesOrder paid = order;
         if (!"PAID".equals(order.paymentStatus())) {
+            reserveInventory(order);
+            int paidUpdated = mapper.markPaid(orderId);
+            paid = mapper.findById(orderId);
+            // A zero update can mean another concurrent payment already won
+            // the conditional update.  Accept it only after verifying PAID.
+            if ((paidUpdated != 0 && paidUpdated != 1) || paid == null
+                    || !"PAID".equals(paid.paymentStatus())) {
+                throw new BusinessException("ORD-004", "订单支付状态更新失败，请稍后重试");
+            }
+        }
+
+        ensureFulfillment(paid);
+        int fulfillingUpdated = mapper.markFulfilling(orderId);
+        SalesOrder fulfilling = mapper.findById(orderId);
+        if ((fulfillingUpdated != 0 && fulfillingUpdated != 1) || fulfilling == null
+                || !"PAID".equals(fulfilling.paymentStatus())
+                || !"FULFILLING".equals(fulfilling.fulfillmentStatus())) {
+            throw new BusinessException("ORD-004", "订单履约状态更新失败，请稍后重试");
+        }
+        // A retry from READY_FOR_FULFILLMENT can reattempt publication after
+        // a prior fulfillment failure. Retries may produce duplicate events;
+        // consumers should deduplicate by orderId. Delivery still requires
+        // the caller to retry until a durable outbox is implemented.
+        publishPaidEvent(fulfilling);
+        return ApiResponse.success(fulfilling);
+    }
+
+    private void publishPaidEvent(SalesOrder order) {
+        eventPublisher.ifPresent(publisher -> publisher.publishPaid(order));
+    }
+
+    private void reserveInventory(SalesOrder order) {
+        try {
             var result = inventoryClient.post().uri("/api/v1/inventory/reservations")
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(new ReserveRequest(order.orderId(), order.sku(), order.quantity()))
@@ -79,18 +116,9 @@ public class OrderController {
             if (result == null || !"0".equals(result.code())) {
                 throw new BusinessException("ORD-002", "库存预占失败");
             }
-            mapper.markPaid(orderId);
-            newlyPaid = true;
+        } catch (RestClientException ex) {
+            throw new BusinessException("ORD-002", "库存服务暂不可用或预占失败，请稍后重试");
         }
-
-        SalesOrder paid = mapper.findById(orderId);
-        ensureFulfillment(paid);
-        mapper.markFulfilling(orderId);
-        SalesOrder fulfilling = mapper.findById(orderId);
-        if (newlyPaid) {
-            eventPublisher.ifPresent(publisher -> publisher.publishPaid(fulfilling));
-        }
-        return ApiResponse.success(fulfilling);
     }
 
     private void ensureFulfillment(SalesOrder order) {

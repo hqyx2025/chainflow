@@ -30,9 +30,15 @@ management:
     health:
       probes:
         enabled: true
+      group:
+        readiness:
+          include: readinessState,db
 server:
   port: 9003
 chainflow:
   services:
     inventory-url: ${INVENTORY_SERVICE_URL:http://localhost:9004}
+logging:
+  pattern:
+    level: '%5p [traceId=%X{X-Trace-Id:-}]'
 

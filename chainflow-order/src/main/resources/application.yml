@@ -30,6 +30,9 @@ management:
     health:
       probes:
         enabled: true
+      group:
+        readiness:
+          include: readinessState,db
 server:
   port: 9005
 chainflow:
@@ -47,4 +50,7 @@ seata:
   service:
     grouplist:
       default: ${SEATA_SERVER:127.0.0.1:8091}
+logging:
+  pattern:
+    level: '%5p [traceId=%X{X-Trace-Id:-}]'
 

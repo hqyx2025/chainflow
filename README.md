@@ -81,6 +81,7 @@ ChainFlow 是一个面向采购、库存、订单与履约的 Java 微服务项�
 - 使用 Temurin Java 17 和 Maven 构建缓存运行 `mvn clean verify`，包括独立 MySQL 8 中的采购集成测试；
 - 校验基础设施与业务服务的合并 Docker Compose 配置，不拉取镜像，也不启动服务。
 - 使用 OpenAPI 规范验证器校验静态接口契约。
+- 在临时 MySQL 数据库验证表约束、旧库升级、脏数据预检和重复迁移，不修改应用已有表。
 
 ## 接口演示
 
@@ -119,3 +120,5 @@ curl -X POST http://localhost:8080/api/v1/auth/logout \
 当前业务通过 REST 调用与服务内事务实现演示闭环。订单服务包含 Seata 事务入口与 RocketMQ 发布代码，默认关闭；跨服务 XID 传播、`undo_log`、事务组映射和 Outbox 仍需实现与验证，单独打开环境变量尚不能保证分布式事务或消息一致性。Elasticsearch 目前提供基础设施，检索读模型待接入。生产部署还需替换演示账号、JWT 密钥与默认凭据。
 
 真实容器回归可运行 `pwsh -File scripts/smoke.ps1`，步骤和数据副作用见 [`docs/verification.md`](docs/verification.md)。
+
+支持网关与服务间 Trace ID 透传、依赖型 readiness、履约状态迁移校验；旧数据库约束升级见 [`V002 迁移脚本`](infra/mysql/migrations/V002__business_constraints.sql)。

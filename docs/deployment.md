@@ -15,6 +15,13 @@
 
 Compose 文件位于仓库根目录，RocketMQ Broker 配置位于 `infra/rocketmq/broker.conf`。首次启动时会创建持久化卷，删除容器不会删除数据。
 
+四个业务模块的 `schema.sql` 会在服务启动时创建表，并在 MySQL 8.0.36 上声明 InnoDB、`utf8mb4`、正数数量和合法状态约束；采购入库、库存预占和履约创建的唯一键分别保证重试幂等。`CREATE TABLE IF NOT EXISTS` 不会给已经存在的旧表追加约束。已有数据卷请在备份和暂停写入后执行 [`V002__business_constraints.sql`](../infra/mysql/migrations/V002__business_constraints.sql)，无需删除数据卷。该脚本先检查存量数据，发现非法数量或状态时会中止，修复数据后可重跑；已存在的同名约束会跳过。脚本不变更字符集和引擎（可能涉及重建索引，需独立评估），新建表由 `schema.sql` 明确声明。MySQL DDL 会隐式提交，因此应在维护窗口执行；生产环境建议将该脚本纳入版本化迁移流程，不要依赖应用启动时的 schema 初始化。
+
+```bash
+# 选择目标数据库后执行；账号需要 ALTER、CREATE ROUTINE 权限
+mysql -h 127.0.0.1 -P 13306 -u chainflow -p chainflow < infra/mysql/migrations/V002__business_constraints.sql
+```
+
 ## 构建并启动业务服务容器
 
 业务服务使用 `docker/Dockerfile.service`，镜像包含已经由 Maven 打包的 Spring Boot JAR 和用于健康检查的 `curl`。先完成打包，再用基础设施 Compose 文件和业务服务覆盖文件一起启动：
@@ -153,9 +160,14 @@ REDIS_PASSWORD=change-me-redis
 
 ## 就绪检查与故障排查
 
+六个服务均提供 `/actuator/health/liveness` 与 `/actuator/health/readiness`。存活探针仅反映进程状态；就绪探针除应用状态外，认证与网关检查 Redis，采购、库存、订单和履约检查 MySQL。Compose 保留 `/actuator/health` 综合检查。指标接口只供内部服务诊断，网关仅暴露 health。
+
+客户端响应中的 `X-Trace-Id` 可用于检索同一次业务调用的日志。业务请求日志记录 method、path、HTTP 状态与耗时，避免记录请求体、查询参数或认证头；健康探针请求不写这类完成日志。Servlet 日志格式包含 MDC traceId，网关完成日志显式记录 traceId。未捕获异常在服务日志保留堆栈，接口只返回通用错误和 traceId。
+
 ```bash
 # 网关及其 Redis 连接
 curl --fail http://127.0.0.1:8080/actuator/health
+curl --fail http://127.0.0.1:8080/actuator/health/readiness
 
 # 内部业务服务（通过容器内已安装的 curl 访问）
 docker compose -f docker-compose.yml -f docker-compose.services.yml exec auth curl --fail http://127.0.0.1:9001/actuator/health
